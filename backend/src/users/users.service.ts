@@ -1,32 +1,35 @@
-
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User } from './schemas/user.schema';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-
-  constructor(@InjectModel(User.name) private userModel: Model<User>) { }
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const extingingUser = await this.userModel.findOne({
-      $and: [{ email: createUserDto.email }, { username: createUserDto.username }]
+    const { password, ...userData } = createUserDto;
+
+    // Criptografa a senha antes de salvar
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new this.userModel({
+      ...userData,
+      password: hashedPassword,
     });
 
-    if (extingingUser) {
-      throw new BadRequestException('Usuário com esse email já está cadastrado');
-    }
+    return newUser.save();
+  }
 
-    const passwordHashed = await bcrypt.hash(createUserDto.password, 10);
+  async findByEmail(email: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ email }).select('+password').exec();
+  }
 
-    const createdUser = new this.userModel({
-      ...createUserDto,
-      password: passwordHashed
-    });
-
-    return createdUser.save();
+  async findAll(): Promise<User[]> {
+    return this.userModel.find().exec();
   }
 }

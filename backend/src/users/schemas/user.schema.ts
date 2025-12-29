@@ -6,6 +6,9 @@ export type UserDocument = HydratedDocument<User>;
 @Schema({ timestamps: true })
 
 export class User {
+    // toObject(): { [x: string]: any; password: any; } {
+    //     throw new Error('Method not implemented.');
+    //}
     @Prop({ required: true })
     username: string;
 
