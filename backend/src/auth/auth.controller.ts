@@ -21,4 +21,4 @@ export class AuthController {
         // 3. Se estiver tudo ok, gera e retorna o Token JWT
         return this.authService.login(user);
     }
-}
+}   
