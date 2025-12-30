@@ -1,50 +1,58 @@
-// src/posts/posts.service.ts
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from './schemas/post.schema';
 import { CreatePostDto } from './dto/create-post.dto';
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Comment, CommentDocument } from '../comments/schemas/comment.schema';
 
 @Injectable()
 export class PostsService {
-  constructor(@InjectModel(Post.name) private postModel: Model<PostDocument>) { }
+  constructor(
+    @InjectModel(Post.name) private postModel: Model<PostDocument>,
+    @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
+  ) { }
 
-  async create(createPostDto: CreatePostDto, userId: string): Promise<Post> {
+  async create(createPostDto: CreatePostDto, userId: string) {
     const createdPost = new this.postModel({
       ...createPostDto,
-      author: userId, // Vincula o post ao usuário logado
+      author: userId,
     });
     return createdPost.save();
   }
 
   async findAll() {
-    // O 'populate' troca o ID do autor pelos dados reais (nome e email)
-    return this.postModel.find().populate('author', 'name email username').exec();
+    const posts = await this.postModel
+      .find()
+      .populate('author', 'username email')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    return Promise.all(
+      posts.map(async (post) => {
+        // Converte o ID para string e depois para ObjectId para não ter erro de tipo
+        const count = await this.commentModel.countDocuments({
+          post: new Types.ObjectId(post._id.toString())
+        });
+
+        return {
+          ...post.toObject(),
+          commentCount: count,
+        };
+      }),
+    );
   }
 
   async update(id: string, updatePostDto: any, userId: string) {
     const post = await this.postModel.findById(id);
-
     if (!post) throw new NotFoundException('Post não encontrado');
-
-    // Validação: O autor do post é o mesmo que está logado?
-    if (post.author.toString() !== userId) {
-      throw new ForbiddenException('Tu não tens permissão para editar este post, malandro!');
-    }
-
+    if (post.author.toString() !== userId) throw new ForbiddenException('Ação proibida');
     return this.postModel.findByIdAndUpdate(id, updatePostDto, { new: true });
   }
 
   async remove(id: string, userId: string) {
     const post = await this.postModel.findById(id);
-
     if (!post) throw new NotFoundException('Post não encontrado');
-
-    // Validação de segurança
-    if (post.author.toString() !== userId) {
-      throw new ForbiddenException('Não podes apagar o que não é teu!');
-    }
-
+    if (post.author.toString() !== userId) throw new ForbiddenException('Ação proibida');
     return this.postModel.findByIdAndDelete(id);
   }
 }
